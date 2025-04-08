@@ -1,7 +1,7 @@
 import numpy as np
-from mab import MAB
+from algorithms.mab_base import MabBase
 
-class ThompsonSampling(MAB):
+class ThompsonSampling(MabBase):
     """
     Thompson Sampling algorithm for multi-armed bandit problems.
     This class implements the Thompson Sampling algorithm for selecting
@@ -13,3 +13,6 @@ class ThompsonSampling(MAB):
         self.alpha = np.ones(self.n_arms)
         self.beta = np.ones(self.n_arms)
         self.reward = np.zeros(self.n_samples - self.window_size)
+
+    def run(self):
+        pass

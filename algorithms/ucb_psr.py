@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.stats import norm, skew, kurtosis
-from mab import MAB
+from algorithms.mab_base import MabBase
 
 
-class UCBPSR(MAB):
+class UCBPSR(MabBase):
     """
     Upper Confidence Bound with Probabilistic Sharpe Ration algorithm for multi-armed bandit problems.
     This class implements the UCB algorithm for selecting the best arm based on
@@ -15,7 +15,7 @@ class UCBPSR(MAB):
         self.reward = np.ones(self.n_samples - self.window_size)
         self.played_times = np.zeros(self.n_arms)
 
-    def algorithm(self):
+    def run(self):
         for t in range(self.window_size, self.n_samples):
             # Get current slice from previous data (window size)
             slice = self.R[:, t - self.window_size:t]
@@ -44,20 +44,16 @@ class UCBPSR(MAB):
             # Compute the upper bound of expected reward
             sharpe_ratio_upper_bound = (sharpe_ratio + np.sqrt((2*np.log(t)) / (self.window_size + self.played_times))) * np.array(self.psr_set)
             
-            action1 = np.argmax(sharpe_ratio_upper_bound[:cutoff])
-            action2 = np.argmax(sharpe_ratio_upper_bound[cutoff:]) + cutoff
+            passive = np.argmax(sharpe_ratio_upper_bound[:cutoff])
+            active = np.argmax(sharpe_ratio_upper_bound[cutoff:]) + cutoff
             
             # Select the optimal arm
             #action1 = np.argmax(self.psr_set[:l])
             #action2 = np.argmax(self.psr_set[l:])+l
 
-            self.played_times[action1] += 1
-            self.played_times[action2] += 1
+            self.played_times[passive] += 1
+            self.played_times[active] += 1
 
-            # Optimal weight
-            Adiag = eigenvalues.diagonal()
-            theta = Adiag[action1] / (Adiag[action1] + Adiag[action2])
-            self.weight = (1-theta) * eigenvectors[:,action1] + theta * eigenvectors[:,action2]
-            
-            self.reward[t - self.window_size] = self.weight.dot(self.R[:,t])
+            # Optimize the weights
+            self.update_weight_reward(H=eigenvectors, A=eigenvalues, passive=passive, active=active)
 

@@ -1,11 +1,17 @@
 import numpy as np
 
-
-class MAB:
+class MabBase:
     """
-    Orthogonal Portfolio algorithm for multi-armed bandit problems.
-    This class implements the Orthogonal Portfolio algorithm for selecting
-    the best arm based on the covariance of the arms' returns.
+    Base class for multi-armed bandit algorithms.
+    This class provides a common interface for all multi-armed bandit algorithms.
+    It should be subclassed to implement specific algorithms.
+    Attributes:
+        R (numpy.ndarray): The reward matrix of shape (n_arms, n_samples).
+        n_arms (int): The number of arms.
+        n_samples (int): The number of samples.
+        window_size (int): The size of the sliding window for the algorithm.
+        reward (numpy.ndarray): The reward array.
+        played_times (numpy.ndarray): The number of times each arm has been played.
     """
     def __init__(self, R, window_size=120):
         self.R = R
@@ -18,7 +24,7 @@ class MAB:
         self.reward = np.ones(self.n_samples - self.window_size)
         # self.played_times = np.zeros(self.n_arms)
 
-    def algorithm(self):
+    def run(self):
         raise NotImplementedError("This method should be overridden by subclasses")
 
     def orthogonal_portfolio(self, data, cutoff=None):
@@ -71,6 +77,24 @@ class MAB:
 
         return normalized_eigenvectors, normalized_eigenvalues, cutoff, portfolio_reward, sharpe_ratio
     
+    def update_weight_reward(self, t, H, A, passive, active):
+        """
+        Compute the optimal weights and rewards for the passive and active portfolios.
+        Parameters:
+            t (int): The current time step.
+            H (numpy.ndarray): The eigenvectors matrix.
+            A (numpy.ndarray): The eigenvalues matrix.
+            passive (int): The index of the passive portfolio.
+            active (int): The index of the active portfolio.
+        """
+        Adiag = A.diagonal()
+        theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
+        self.weight = (1 - theta) * H[:, passive] + theta * H[:, active]
+        self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
+
+
+
+
 
     def test(self):
         for t in range(self.window_size, self.n_samples):

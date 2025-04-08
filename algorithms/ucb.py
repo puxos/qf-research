@@ -1,7 +1,7 @@
 import numpy as np
-from mab import MAB
+from algorithms.mab_base import MabBase
 
-class UCB(MAB):
+class UCB(MabBase):
     """
     Upper Confidence Bound algorithm for multi-armed bandit problems.
     This class implements the UCB algorithm for selecting the best arm based on
@@ -13,7 +13,7 @@ class UCB(MAB):
         self.reward = np.ones(self.n_samples - self.window_size)
         self.played_times = np.zeros(self.n_arms)
 
-    def algorithm(self):
+    def run(self):
         for t in range(self.window_size, self.n_samples):
             # Get current slice from previous data (window size)
             slice = self.R[:, t - self.window_size:t]
@@ -34,11 +34,9 @@ class UCB(MAB):
             self.played_times[passive] += 1
             self.played_times[active] += 1
 
-            # # Optimize the weights
-            Adiag = eigenvalues.diagonal()
-            theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
-            self.weight = (1 - theta) * eigenvectors[:, passive] + theta * eigenvectors[:, active]
-            self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
+            # Optimize the weights
+            self.update_weight_reward(H=eigenvectors, A=eigenvalues, passive=passive, active=active)
+
 
 
     
