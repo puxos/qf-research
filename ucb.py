@@ -1,63 +1,44 @@
 import numpy as np
+from mab import MAB
 
-def orthogonal_portfolio(sliceReturns, n, n_i):
-    # Compute the covariance matrix of the slice returns
-    # sliceReturns is a 2D array where each row represents a different arm
-    # and each column represents a different round
-    convariance_matrix = np.cov(sliceReturns)
-
-    # Eigenvalue decomposition
-    # The covariance matrix is symmetric, so we can use np.linalg.eigh
-    # to compute the eigenvalues and eigenvectors
-    # A is eigenvalues, H is eigenvectors
-    eigenvalues, eigenvectors = np.linalg.eig(convariance_matrix)
-
-    # Make sure the eigenvalues are real and positive
-    assert(eigenvalues.sum(eigenvalues < 0) == 0)
-    
-    # Sort the eigenvalues
-    index = np.argsort(-eigenvalues)
-    A = np.diag(eigenvalues[index])
-    H = eigenvectors[:, index]
-
-    l = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
-
-    # Normalize weight
-    H /= np.sum(H, axis=0)
-    A_new = H.T.dot(convariance_matrix).dot(H)
-
-    # Compute the Sharpe Ration
-    portfolio_reward = H.T.dot(sliceReturns)
-    sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(A_new.diagonal())
-
-    # Compute the Upper Bound of expected reward
-    sr_upper_bound = sharpe_ratio + np.sqrt(2 * np.log(n) / n_i) * np.sqrt(A_new.diagonal())
-
-def compute_sharpe_ratio(sliceReturns, n, n_i):
+class UCB(MAB):
     """
-    Compute the Sharpe Ratio of the portfolio
+    Upper Confidence Bound algorithm for multi-armed bandit problems.
+    This class implements the UCB algorithm for selecting the best arm based on
+    the average reward and the number of times each arm has been played.
     """
-    # Compute the covariance matrix of the slice returns
-    # sliceReturns is a 2D array where each row represents a different arm
-    # and each column represents a different round
-    convariance_matrix = np.cov(sliceReturns)
+    def __init__(self, R, window_size=120):
+        super().__init__(R, window_size)
+        # self.weights = np.zeros(self.n_arms)
+        self.reward = np.ones(self.n_samples - self.window_size)
+        self.played_times = np.zeros(self.n_arms)
 
-    # Eigenvalue decomposition
-    # The covariance matrix is symmetric, so we can use np.linalg.eigh
-    # to compute the eigenvalues and eigenvectors
-    # A is eigenvalues, H is eigenvectors
-    eigenvalues, eigenvectors = np.linalg.eig(convariance_matrix)
+    def algorithm(self):
+        for t in range(self.window_size, self.n_samples):
+            # Get current slice from previous data (window size)
+            slice = self.R[:, t - self.window_size:t]
 
-    # Make sure the eigenvalues are real and positive
-    assert(eigenvalues.sum(eigenvalues < 0) == 0)
+            # Compute the orthogonal portfolio
+            eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio = self.orthogonal_portfolio(slice)
+
+            # get cutoff number
+            cutoff = self.cutoff_function()
+
+            # Compute the Upper Bound of expected reward
+            sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(self.played_times)) / (self.window_size * self.played_times))
+
+            # Compute the optimal portfolio
+            passive = np.argmax(sr_upper_bound[:cutoff])
+            active = np.argmax(sr_upper_bound[cutoff:]) + cutoff
+
+            self.played_times[passive] += 1
+            self.played_times[active] += 1
+
+            # # Optimize the weights
+            Adiag = eigenvalues.diagonal()
+            theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
+            self.weight = (1 - theta) * eigenvectors[:, passive] + theta * eigenvectors[:, active]
+            self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
+
+
     
-    # Sort the eigenvalues
-    index = np.argsort(-eigenvalues)
-    A = np.diag(eigenvalues[index])
-    H = eigenvectors[:, index]
-
-    l = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
-
-    # Normalize weight
-    H /= np.sum(H, axis=0)
-

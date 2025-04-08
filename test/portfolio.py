@@ -6,51 +6,80 @@ class BanditPortfolio:
     def __init__(self, R):
         self.R = R
         self.n_arms, self.n_samples = R.shape
+
+    def orthogonal_portfolio(self, data, cutoff=None):
+        """
+        Compute the orthogonal portfolio based on the covariance matrix of the returns.
+        Parameters:
+            data (numpy.ndarray): The input data slice of shape (n_arms, window_size)
+            cutoff (int, optional): The cutoff index for the eigenvalues. If None, it will be computed.
         
+        Returns: tuple: A tuple containing:
+            normalized_eigenvectors (numpy.ndarray): The normalized eigenvectors.
+            normalized_eigenvalues (numpy.ndarray): The normalized eigenvalues.
+            cutoff (int): The cutoff index for the eigenvalues.
+            portfolio_reward (numpy.ndarray): The portfolio reward.
+            sharpe_ratio (numpy.ndarray): The Sharpe ratio of each portfolio.
+        """
+        # Step 1: Center the data (skipping this step as the data is already centered)
+
+        # Step 2: Compute the covariance matrix
+        covariance_matrix = np.cov(data)
+
+        # Step 3: Perform eigenvalue decomposition
+        # eigenvalues(A), eigenvectors(H)
+        eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)    # equation 5
+
+        # Check if all eigenvalues are non-negative
+        assert(np.all(eigenvalues >= 0))  
+        
+        # Step 4: Sort eigenvalues and eigenvectors in descending order
+        sorted_indices = np.argsort(eigenvalues)[::-1]
+        eigenvalues = eigenvalues[sorted_indices]
+        eigenvectors = eigenvectors[:, sorted_indices]
+
+        if cutoff is None:
+            # Compute the cutoff index for the eigenvalues
+            # This is a placeholder. You should implement your own logic to determine the cutoff.
+            # For example, you could use the first eigenvalue that is less than the median.
+            cutoff = np.argwhere(np.median(np.diag(eigenvalues)) > np.diag(eigenvalues))[0][0]
+
+        # Step 5: Normalize eigenvectors matrix (L1 normalization)
+        # Normalize eigenvectors matrix (equation 7)
+        normalized_eigenvectors = eigenvectors / np.sum(eigenvectors, axis=0)
+        # Normalize eigenvalues matrix (equation 8)
+        normalized_eigenvalues = normalized_eigenvectors.T.dot(covariance_matrix).dot(normalized_eigenvectors)
+        # Step 6: Compute the Sharpe Ratio of each portfolio (equation 10)
+        portfolio_reward = normalized_eigenvectors.T.dot(data)
+        sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(normalized_eigenvalues.diagonal())
+
+        return normalized_eigenvectors, normalized_eigenvalues, cutoff, portfolio_reward, sharpe_ratio
+
     def UCB(self, window_size):
         self.reward = np.ones(self.n_samples - window_size)
         self.played_times = np.ones(self.n_arms)
         
         for t in range(window_size, self.n_samples):
-            sliceR = self.R[:, t-window_size:t]
+            slice = self.R[:, t-window_size:t]
             
-            # Compute the covariance matrix
-            covariance_matrix =  np.cov(sliceR)
-            
-            # Eigenvalue Decomposition
-            A, H = np.linalg.eig(covariance_matrix)
-            
-            # All eigenvalues are positive
-            assert(np.sum(A<0) == 0)
-            
-            # Sort the eigenvalues
-            idx = np.argsort(-A)
-            A = np.diag(A[idx])
-            H = H[:,idx]
-            l = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
-            
-            # Normalized weight
-            H /= np.sum(H, axis= 0)
-            ANew =  H.T.dot(covariance_matrix).dot(H)
-            
-            # Compute the sharpe ratio
-            portfolio_reward = H.T.dot(sliceR)
+            # Compute the orthogonal portfolio
+            eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio = self.orthogonal_portfolio(slice)
 
-            sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(ANew.diagonal())
-            #sharpe_ratio = MinMaxScaler().fit_transform(sharpe_ratio.reshape(-1,1)).reshape(-1)
-            
+            # get cutoff number
+            cutoff = 5
+
             # Compute the upper bound of expected reward
-            sharpe_ratio_upper_bound = sharpe_ratio + np.sqrt((2*np.log(t))/(window_size+self.played_times))
+            sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(t)) / (window_size * self.played_times))
             
             # Select the optimal arm
-            action1 = np.argmax(sharpe_ratio_upper_bound[:l])
-            action2 = np.argmax(sharpe_ratio_upper_bound[l:])+l
+            action1 = np.argmax(sr_upper_bound[:cutoff])
+            action2 = np.argmax(sr_upper_bound[cutoff:])+cutoff
 
             self.played_times[action1] += 1
             self.played_times[action2] += 1
 
             # Optimal weight
-            Adiag = ANew.diagonal()
+            Adiag = eigenvalues.diagonal()
             theta = Adiag[action1] / (Adiag[action1] + Adiag[action2])
             self.weight = (1-theta)*H[:,action1] + theta*H[:,action2]
             
@@ -64,55 +93,25 @@ class BanditPortfolio:
         self.fail = np.ones(4)
 
         for t in range(window_size, self.n_samples):
+            slice = self.R[:, t-window_size:t]
 
-            sliceR = self.R[:, t-window_size:t]
+            # Compute the orthogonal portfolio
+            eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio = self.orthogonal_portfolio(slice)
 
-            # Compute the covariance matrix
-            covariance_matrix = np.cov(sliceR)  # histroical covariance
-
-            # Eigenvalue Decomposition
-            A, H = np.linalg.eig(covariance_matrix)  # equation 5
-
-            # All eigenvalues are positive
-            assert(np.sum(A < 0) == 0)
-
-            # Sort the eigenvalues
-            idx = np.argsort(-A)  # sort eigenvalues
-            A = np.diag(A[idx])  #  eigenvalues as vector
-            H = H[:, idx]  #  n(number of assets) orthonormal portfolios
-            l = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
-
-            # Normalized weight
-            H /= np.sum(H, axis=0)  # equation 7 normalized eigenvectors
-            #  equation 8 normalized eigenvalues matrix
-            ANew = H.T.dot(covariance_matrix).dot(H)
-
-            # Compute the sharpe ratio
-            #  Return of each port. in the slice window
-            portfolio_reward = H.T.dot(sliceR)
-            # Estimator of portfolio return, rolling average
-            sharpe_ratio = np.mean(
-                portfolio_reward, axis=1) / np.sqrt(ANew.diagonal())
-            # Normalize the sharpe ratio
-            #sharpe_ratio = MinMaxScaler().fit_transform(
-            #    sharpe_ratio.reshape(-1, 1)).reshape(-1)
-
-            # Compute the upper bound of expected reward
-            sharpe_ratio_upper_bound = sharpe_ratio + \
-                np.sqrt((2*np.log(t))/(window_size+self.played_times))
+            sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(t))/(window_size + self.played_times))
+            cutoff = 5
 
             # Select the optimal arm
-            #  passive portfolios
-            action1 = np.argmax(sharpe_ratio_upper_bound[:l])
+            action1 = np.argmax(sr_upper_bound[:cutoff])
             #  active portfolios
-            action2 = np.argmax(sharpe_ratio_upper_bound[l:])+l
+            action2 = np.argmax(sr_upper_bound[cutoff:])+cutoff
 
             #  update the times portfolio played
             self.played_times[action1] += 1
             self.played_times[action2] += 1  # update the second action
 
             # Optimal weight, Min var allocation between 2 chosen portfolios
-            Adiag = ANew.diagonal()
+            Adiag = eigenvalues.diagonal()
             theta = Adiag[action1] / (Adiag[action1] + Adiag[action2])
             
             self.psr_set = []
@@ -133,19 +132,15 @@ class BanditPortfolio:
                 np.sqrt((2*np.log(t))/(window_size+self.played_times)))*np.array(self.psr_set)
                 
             
-            action_1_1 = np.argmax(sharpe_ratio_upper_bound_psr[:l])
-            action_1_2 = np.argmax(sharpe_ratio_upper_bound_psr[l:])+l
-
+            action_1_1 = np.argmax(sr_upper_bound_psr[:cutoff])
+            action_1_2 = np.argmax(sr_upper_bound_psr[cutoff:])+cutoff
 
             # Optimal weight
             theta_ = Adiag[action_1_1] / (Adiag[action_1_1] + Adiag[action_1_2])
-                        
-            
-            
+                                    
             self.weight_1 = (1-theta)*H[:, action1] + theta*H[:, action2]
-            
             self.weight_2 = np.ones(self.n_arms)/self.n_arms
-            
+
             self.weight_3 = (np.linalg.inv(covariance_matrix)@np.ones(self.n_arms).reshape(-1, 1))/(np.ones(
                 self.n_arms).reshape(-1, 1).T@np.linalg.inv(covariance_matrix)@np.ones(self.n_arms).reshape(-1, 1))
             
@@ -184,38 +179,15 @@ class BanditPortfolio:
         self.psr = {}
         
         for t in range(window_size, self.n_samples):
-            sliceR = self.R[:, t-window_size:t]
+            slice = self.R[:, t-window_size:t]
             
-            # Compute the covariance matrix
-            covariance_matrix =  np.cov(sliceR)
+            # Compute the orthogonal portfolio
+            eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio = self.orthogonal_portfolio(slice)
             
-            # Eigenvalue Decomposition
-            A, H = np.linalg.eig(covariance_matrix)
-            
-            # All eigenvalues are positive
-            assert(np.sum(A<0) == 0)
-            
-            # Sort the eigenvalues
-            idx = np.argsort(-A)
-            A = np.diag(A[idx])
-            H = H[:,idx]
-            l = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
-            
-            # Normalized weight
-            H /= np.sum(H, axis= 0)
-            ANew =  H.T.dot(covariance_matrix).dot(H)
-            
-            # Compute the sharpe ratio
-            portfolio_reward = H.T.dot(sliceR)
+            # get cutoff number
+            cutoff = 5
 
-            
-            sharpe_ratio = (np.mean(portfolio_reward, axis=1) / np.sqrt(ANew.diagonal()))
-            #sharpe_ratio = MinMaxScaler().fit_transform(sharpe_ratio.reshape(-1,1)).reshape(-1)
-            #scl = MinMaxScaler()
-            #sharpe_ratio = scl.fit_transform(sharpe_ratio.reshape(-1,1)).reshape(-1)
-            
-            
-            
+
             self.psr_set = []
             for a in range(len(sharpe_ratio)):
                 sr = sharpe_ratio[a]
@@ -226,6 +198,7 @@ class BanditPortfolio:
                 denom = np.sqrt(np.abs((1 + 0.5*sr**2 - skewness*sr + ((kurto-3)/4)*sr**2))/(n-1))
                 #psr = norm.cdf(nomin/denom)
                 self.psr_set.append(nomin/denom)
+
             #self.psr_set = scl.fit_transform(np.array(self.psr_set).reshape(-1,1)).reshape(-1)
             self.psr_set = np.array([norm.cdf(a) for a in self.psr_set])
             self.psr[t] = self.psr_set
@@ -258,35 +231,15 @@ class BanditPortfolio:
         self.psr = {}
         
         for t in range(window_size, self.n_samples):
-            sliceR = self.R[:, t-window_size:t]
+            slice = self.R[:, t-window_size:t]
             
-            # Compute the covariance matrix
-            covariance_matrix =  np.cov(sliceR)
-            
-            # Eigenvalue Decomposition
-            A, H = np.linalg.eig(covariance_matrix)
-            
-            # All eigenvalues are positive
-            assert(np.sum(A<0) == 0)
-            
-            # Sort the eigenvalues
-            idx = np.argsort(-A)
-            A = np.diag(A[idx])
-            H = H[:,idx]
-            l = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
-            
-            # Normalized weight
-            H /= np.sum(H, axis= 0)
-            ANew =  H.T.dot(covariance_matrix).dot(H)
-            
-            # Compute the sharpe ratio
-            portfolio_reward = H.T.dot(sliceR)
+            # Compute the orthogonal portfolio
+            eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio = self.orthogonal_portfolio(slice)
 
+            # get cutoff number
+            cutoff = 5
             
-            sharpe_ratio = (np.mean(portfolio_reward, axis=1) / np.sqrt(ANew.diagonal()))
-            scl = MinMaxScaler(feature_range=(-3,3))
-            #sharpe_ratio = scl.fit_transform(sharpe_ratio.reshape(-1,1)).reshape(-1)
-            
+                        
             self.psr_set = []
             #psr_second_set = []
             for a in range(len(sharpe_ratio)):
