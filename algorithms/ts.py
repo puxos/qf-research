@@ -9,10 +9,9 @@ class ThompsonSampling(MabBase):
     """
     def __init__(self, R, window_size=120):
         super().__init__(R, window_size)
-
-        self.alpha = np.ones(self.n_arms)
-        self.beta = np.ones(self.n_arms)
-        self.reward = np.zeros(self.n_samples - self.window_size)
+        self.mv_reward = np.ones(self.n_samples - self.window_size)
+        self.success = np.ones(4)
+        self.failure = np.ones(4)
 
     def run(self):
         pass

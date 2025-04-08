@@ -6,14 +6,13 @@ from algorithms.mab_base import MabBase
 class UCBPSR(MabBase):
     """
     Upper Confidence Bound with Probabilistic Sharpe Ration algorithm for multi-armed bandit problems.
-    This class implements the UCB algorithm for selecting the best arm based on
-    the average reward and the number of times each arm has been played.
+    Attributes:
+        psr (dict): Dictionary to store the Probabilistic Sharpe Ratio for each time step.
+        psr_set (list): List to store the Probabilistic Sharpe Ratio for the current time step.
     """
     def __init__(self, R, window_size=120):
         super().__init__(R, window_size)
-        # self.weights = np.zeros(self.n_arms)
-        self.reward = np.ones(self.n_samples - self.window_size)
-        self.played_times = np.zeros(self.n_arms)
+        self.psr = {}
 
     def run(self):
         for t in range(self.window_size, self.n_samples):
@@ -23,8 +22,8 @@ class UCBPSR(MabBase):
             # Compute the orthogonal portfolio
             eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio = self.orthogonal_portfolio(slice)
 
-            # get cutoff number
-            cutoff = self.cutoff_function()
+            # get cutoff l
+            cutoff = self.cutoff()
 
             self.psr_set = []
             for a in range(len(sharpe_ratio)):
@@ -51,9 +50,6 @@ class UCBPSR(MabBase):
             #action1 = np.argmax(self.psr_set[:l])
             #action2 = np.argmax(self.psr_set[l:])+l
 
-            self.played_times[passive] += 1
-            self.played_times[active] += 1
-
-            # Optimize the weights
-            self.update_weight_reward(H=eigenvectors, A=eigenvalues, passive=passive, active=active)
+            # Update played_times, reward, and weight
+            self.update(t=t, H=eigenvectors, A=eigenvalues, passive=passive, active=active)
 

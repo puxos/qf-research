@@ -6,7 +6,7 @@ class MabBase:
     This class provides a common interface for all multi-armed bandit algorithms.
     It should be subclassed to implement specific algorithms.
     Attributes:
-        R (numpy.ndarray): The reward matrix of shape (n_arms, n_samples).
+        R (ndarray): The reward matrix of shape (n_arms, n_samples).
         n_arms (int): The number of arms.
         n_samples (int): The number of samples.
         window_size (int): The size of the sliding window for the algorithm.
@@ -17,27 +17,24 @@ class MabBase:
         self.R = R
         self.n_arms, self.n_samples = R.shape
         self.window_size = window_size
-
-        # self.reward = 0
-        # self.played_times = 
-        # self.weight = np.zeros(self.n_arms)
         self.reward = np.ones(self.n_samples - self.window_size)
-        # self.played_times = np.zeros(self.n_arms)
+        self.played_times = np.ones(self.n_arms)
 
     def run(self):
         raise NotImplementedError("This method should be overridden by subclasses")
+    
+    def cutoff(self):
+        return 5 # by default, the cutoff is 5
 
-    def orthogonal_portfolio(self, data, cutoff=None):
+    def orthogonal_portfolio(self, data):
         """
         Compute the orthogonal portfolio based on the covariance matrix of the returns.
         Parameters:
             data (numpy.ndarray): The input data slice of shape (n_arms, window_size)
-            cutoff (int, optional): The cutoff index for the eigenvalues. If None, it will be computed.
         
         Returns: tuple: A tuple containing:
             normalized_eigenvectors (numpy.ndarray): The normalized eigenvectors.
             normalized_eigenvalues (numpy.ndarray): The normalized eigenvalues.
-            cutoff (int): The cutoff index for the eigenvalues.
             portfolio_reward (numpy.ndarray): The portfolio reward.
             sharpe_ratio (numpy.ndarray): The Sharpe ratio of each portfolio.
         """
@@ -58,26 +55,19 @@ class MabBase:
         eigenvalues = eigenvalues[sorted_indices]
         eigenvectors = eigenvectors[:, sorted_indices] # n(number of assets) orthogonal portfolios
 
-        if cutoff is None:
-            # Compute the cutoff index for the eigenvalues
-            # This is a placeholder. You should implement your own logic to determine the cutoff.
-            # For example, you could use the first eigenvalue that is less than the median.
-            # cutoff = np.argwhere(np.median(np.diag(eigenvalues)) > np.diag(eigenvalues))[0][0]
-            cutoff = np.argwhere(np.median(np.diag(eigenvalues)) > np.diag(eigenvalues))[0][0]
-
         # Step 5: Normalize eigenvectors matrix (L1 normalization)
         # Normalize eigenvectors matrix (equation 7)
-        normalized_eigenvectors /= np.sum(eigenvectors, axis=0)
+        eigenvectors /= np.sum(eigenvectors, axis=0)
         # Normalize eigenvalues matrix (equation 8)
-        normalized_eigenvalues = normalized_eigenvectors.T.dot(convariance_matrix).dot(normalized_eigenvectors)
+        eigenvalues = eigenvectors.T.dot(convariance_matrix).dot(eigenvectors)
 
         # Step 6: Compute the Sharpe Ratio of each portfolio (equation 10)
-        portfolio_reward = normalized_eigenvectors.T.dot(data)
-        sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(normalized_eigenvalues.diagonal())
+        portfolio_reward = eigenvectors.T.dot(data)
+        sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(eigenvalues.diagonal())
 
-        return normalized_eigenvectors, normalized_eigenvalues, cutoff, portfolio_reward, sharpe_ratio
+        return eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio
     
-    def update_weight_reward(self, t, H, A, passive, active):
+    def update(self, t, H, A, passive, active):
         """
         Compute the optimal weights and rewards for the passive and active portfolios.
         Parameters:
@@ -87,12 +77,21 @@ class MabBase:
             passive (int): The index of the passive portfolio.
             active (int): The index of the active portfolio.
         """
+        self.played_times[passive] += 1
+        self.played_times[active] += 1
+
         Adiag = A.diagonal()
         theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
         self.weight = (1 - theta) * H[:, passive] + theta * H[:, active]
         self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
 
-
+    def get_cumulative_wealth(self):
+        """
+        Compute the cumulative wealth of the algorithm.
+        Returns:
+            numpy.ndarray: The cumulative wealth array.
+        """
+        return np.cumprod(self.reward)
 
 
 
