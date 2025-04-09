@@ -24,7 +24,7 @@ class MabBase:
         raise NotImplementedError("This method should be overridden by subclasses")
     
     def cutoff(self):
-        return 5 # by default, the cutoff is 5
+        return 24 # by default, the cutoff is 24
 
     def orthogonal_portfolio(self, data):
         """
