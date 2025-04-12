@@ -20,7 +20,7 @@ class UCB(MabBase):
             cutoff = self.cutoff()
 
             # Compute the Upper Bound of expected reward
-            sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(self.played_times)) / (self.window_size * self.played_times))
+            sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(t)) / (self.window_size * self.played_times))
 
             # Compute the optimal portfolio
             passive = np.argmax(sr_upper_bound[:cutoff])
