@@ -13,18 +13,17 @@ class MabBase:
         reward (numpy.ndarray): The reward array.
         played_times (numpy.ndarray): The number of times each arm has been played.
     """
-    def __init__(self, R, window_size=120):
+    def __init__(self, R, window_size, cutoff):
         self.R = R
         self.n_arms, self.n_samples = R.shape
         self.window_size = window_size
+        self.cutoff = cutoff
+        self.cutoff_record = np.zeros(self.n_samples - self.window_size)
         self.reward = np.ones(self.n_samples - self.window_size)
         self.played_times = np.ones(self.n_arms)
 
     def run(self):
         raise NotImplementedError("This method should be overridden by subclasses")
-    
-    def cutoff(self):
-        return 24 # by default, the cutoff is 24
 
     def orthogonal_portfolio(self, data):
         """
@@ -38,34 +37,39 @@ class MabBase:
             portfolio_reward (numpy.ndarray): The portfolio reward.
             sharpe_ratio (numpy.ndarray): The Sharpe ratio of each portfolio.
         """
-        # Step 1: Center the data (skipping this step as the data is already centered)
+        # Step 1: Center the data (skip)
 
         # Step 2: Compute the covariance matrix
         convariance_matrix = np.cov(data)
 
         # Step 3: Perform eigenvalue decomposition
         # eigenvalues(A), eigenvectors(H)
-        eigenvalues, eigenvectors = np.linalg.eig(convariance_matrix)    # equation 5
+        A, H = np.linalg.eig(convariance_matrix)    # equation 5
 
         # Check if all eigenvalues are non-negative
-        assert(np.all(eigenvalues >= 0))  
+        assert(np.all(A >= 0))  
         
         # Step 4: Sort eigenvalues and eigenvectors in descending order
-        sorted_indices = np.argsort(eigenvalues)[::-1]
-        eigenvalues = eigenvalues[sorted_indices]
-        eigenvectors = eigenvectors[:, sorted_indices] # n(number of assets) orthogonal portfolios
+        sorted_indices = np.argsort(A)[::-1]
+        # sorted_indices = np.argsort(-eigenvalues)
+        A = np.diag(A[sorted_indices])
+        H = H[:, sorted_indices] # n(number of assets) orthogonal portfolios
+
+        # Update cutoff
+        # self.cutoff = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
 
         # Step 5: Normalize eigenvectors matrix (L1 normalization)
         # Normalize eigenvectors matrix (equation 7)
-        eigenvectors /= np.sum(eigenvectors, axis=0)
+        H_norm = H.copy()
+        H_norm /= np.sum(H_norm, axis=0)
         # Normalize eigenvalues matrix (equation 8)
-        eigenvalues = eigenvectors.T.dot(convariance_matrix).dot(eigenvectors)
+        A_norm = H_norm.T.dot(convariance_matrix).dot(H_norm)
 
         # Step 6: Compute the Sharpe Ratio of each portfolio (equation 10)
-        portfolio_reward = eigenvectors.T.dot(data)
-        sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(eigenvalues.diagonal())
+        portfolio_reward = H_norm.T.dot(data)
+        sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(A_norm.diagonal())
 
-        return eigenvectors, eigenvalues, portfolio_reward, sharpe_ratio
+        return H_norm, A_norm, portfolio_reward, sharpe_ratio
     
     def update(self, t, H, A, passive, active):
         """
@@ -84,6 +88,7 @@ class MabBase:
         theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
         self.weight = (1 - theta) * H[:, passive] + theta * H[:, active]
         self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
+        self.cutoff_record[t - self.window_size] = self.cutoff
 
     def get_cumulative_wealth(self):
         """
@@ -95,58 +100,58 @@ class MabBase:
 
 
 
-    def test(self):
-        for t in range(self.window_size, self.n_samples):
-            # Get current slice from previous data (window size)
-            R_slice = self.R[:, t - self.window_size:t]
+    # def test(self):
+    #     for t in range(self.window_size, self.n_samples):
+    #         # Get current slice from previous data (window size)
+    #         R_slice = self.R[:, t - self.window_size:t]
 
-            # Compute the covariance matrix of the slice returns
-            convariance_matrix = np.cov(R_slice)
+    #         # Compute the covariance matrix of the slice returns
+    #         convariance_matrix = np.cov(R_slice)
 
-            # Eigenvalue decomposition
-            # A is eigenvalues, H is eigenvectors
-            A, H = np.linalg.eig(convariance_matrix)    # equation 5
+    #         # Eigenvalue decomposition
+    #         # A is eigenvalues, H is eigenvectors
+    #         A, H = np.linalg.eig(convariance_matrix)    # equation 5
 
-            # Check if all eigenvalues are non-negative
-            assert(np.all(A >= 0))  
+    #         # Check if all eigenvalues are non-negative
+    #         assert(np.all(A >= 0))  
 
-            print(f"A: {A}")
+    #         print(f"A: {A}")
             
-            # Sort the eigenvalues
-            index = np.argsort(-A)
-            # print(f"index: {index}")
-            A = np.diag(A[index])    # eigenvalues as vector
-            H = H[:, index]   # n(number of assets) orthogonal portfolios
-            cutoff = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
+    #         # Sort the eigenvalues
+    #         index = np.argsort(-A)
+    #         # print(f"index: {index}")
+    #         A = np.diag(A[index])    # eigenvalues as vector
+    #         H = H[:, index]   # n(number of assets) orthogonal portfolios
+    #         cutoff = np.argwhere(np.median(np.diag(A)) > np.diag(A))[0][0]
 
-            # Normalize eigenvectors matrix
-            H /= np.sum(H, axis=0)  # equation 7
+    #         # Normalize eigenvectors matrix
+    #         H /= np.sum(H, axis=0)  # equation 7
             
-            # Normalize eigenvalues matrix 
-            A_norm = H.T.dot(convariance_matrix).dot(H) # equation 8
+    #         # Normalize eigenvalues matrix 
+    #         A_norm = H.T.dot(convariance_matrix).dot(H) # equation 8
 
-            # Compute the Sharpe Ratio
-            portfolio_reward = H.T.dot(R_slice)
-            sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(A_norm.diagonal())
+    #         # Compute the Sharpe Ratio
+    #         portfolio_reward = H.T.dot(R_slice)
+    #         sharpe_ratio = np.mean(portfolio_reward, axis=1) / np.sqrt(A_norm.diagonal())
 
-            # Compute the Upper Bound of expected reward
-            sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(t)) / (self.window_size+self.played_times))
+    #         # Compute the Upper Bound of expected reward
+    #         sr_upper_bound = sharpe_ratio + np.sqrt((2 * np.log(t)) / (self.window_size+self.played_times))
 
-            # Compute the optimal portfolio
-            passive = np.argmax(sr_upper_bound[:cutoff])
-            active = np.argmax(sr_upper_bound[cutoff:]) + cutoff
+    #         # Compute the optimal portfolio
+    #         passive = np.argmax(sr_upper_bound[:cutoff])
+    #         active = np.argmax(sr_upper_bound[cutoff:]) + cutoff
 
-            print(f"passive: {passive}")
-            print(f"active: {active}")
+    #         print(f"passive: {passive}")
+    #         print(f"active: {active}")
 
-            self.played_times[passive] += 1
-            self.played_times[active] += 1
+    #         self.played_times[passive] += 1
+    #         self.played_times[active] += 1
 
-            # # Optimize the weights
-            Adiag = A_norm.diagonal()
-            theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
+    #         # # Optimize the weights
+    #         Adiag = A_norm.diagonal()
+    #         theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
 
-            self.weight = (1 - theta) * H[:, passive] + theta * H[:, active]
-            self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
+    #         self.weight = (1 - theta) * H[:, passive] + theta * H[:, active]
+    #         self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
 
-        print(f"reward: {self.reward}")
+    #     print(f"reward: {self.reward}")
