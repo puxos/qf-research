@@ -5,7 +5,7 @@ class UCB(MabBase):
     """
     Upper Confidence Bound algorithm for multi-armed bandit problems.
     """
-    def __init__(self, R, window_size=120, cutoff=5):
+    def __init__(self, R, window_size, cutoff):
         super().__init__(R, window_size=window_size, cutoff=cutoff)
 
     def run(self):

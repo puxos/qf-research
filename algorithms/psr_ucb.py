@@ -10,7 +10,7 @@ class PSRUCB(MabBase):
         psr (dict): Dictionary to store the Probabilistic Sharpe Ratio for each time step.
         psr_set (list): List to store the Probabilistic Sharpe Ratio for the current time step.
     """
-    def __init__(self, R, window_size=120, cutoff=5):
+    def __init__(self, R, window_size, cutoff):
         super().__init__(R, window_size=window_size, cutoff=cutoff)
         self.psr = {}
 

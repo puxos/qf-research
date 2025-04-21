@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import norm, skew, kurtosis
 from algorithms.mab_base import MabBase
 
-
 class PWUCB(MabBase):
     """
     Upper Confidence Bound with Probabilistic Sharpe Ration algorithm for multi-armed bandit problems.
@@ -10,7 +9,7 @@ class PWUCB(MabBase):
         psr (dict): Dictionary to store the Probabilistic Sharpe Ratio for each time step.
         psr_set (list): List to store the Probabilistic Sharpe Ratio for the current time step.
     """
-    def __init__(self, R, window_size=120, cutoff=5):
+    def __init__(self, R, window_size, cutoff):
         super().__init__(R, window_size=window_size, cutoff=cutoff)
         self.psr = {}
 

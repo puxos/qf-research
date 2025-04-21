@@ -1,0 +1,18 @@
+maintainer: Frank,H.L.Lai
+data:
+  dataset: FF48 # FF48, FF100
+  period: # string for year and month
+    start: '198501'
+    end: '202412'
+  compensate: False # True, False
+parameter:
+  window_size: 120
+  cutoff: 5
+algorithm:
+  ucb: True
+  psr: True
+  psr-ucb: True
+  pw-ucb: True
+plot:
+  interval: 10
+  output_dir: ./output

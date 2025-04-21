@@ -18,7 +18,7 @@ class MabBase:
         self.n_arms, self.n_samples = R.shape
         self.window_size = window_size
         self.cutoff = cutoff
-        self.cutoff_record = np.zeros(self.n_samples - self.window_size)
+        # self.cutoff_record = np.zeros(self.n_samples - self.window_size)
         self.reward = np.ones(self.n_samples - self.window_size)
         self.played_times = np.ones(self.n_arms)
 
@@ -88,7 +88,7 @@ class MabBase:
         theta = Adiag[passive] / (Adiag[active] + Adiag[passive])
         self.weight = (1 - theta) * H[:, passive] + theta * H[:, active]
         self.reward[t - self.window_size] = self.weight.dot(self.R[:, t])
-        self.cutoff_record[t - self.window_size] = self.cutoff
+        # self.cutoff_record[t - self.window_size] = self.cutoff
 
     def get_cumulative_wealth(self):
         """
